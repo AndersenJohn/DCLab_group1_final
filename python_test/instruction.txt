@@ -1,0 +1,64 @@
+//game from https://www.youtube.com/watch?v=akEFFYJtH50&t=74s
+
+hp p1 2
+hp p1 2        
+left live 1
+left blank 2
+bullets live blank blank
+phase item 
+phase shoot
+knowledge p1 0 live
+knowledge p2 0 live
+knowledge p1 1 blank
+knowledge p2 1 blank
+knowledge p1 2 blank
+knowledge p2 2 blank
+left live 0
+next
+phase round_end
+hp p2 1
+turn p2
+phase item
+phase shoot
+left blank 1
+next
+left blank 0
+next
+phase round_end
+turn p1
+clear
+
+phase load
+left live 3
+left blank 2
+bullets blank blank live live live
+#phase item
+#phase shoot
+knowledge p1 0 blank
+knowledge p2 0 blank
+left blank 1
+next
+phase round_end
+turn p2
+phase item
+phase shoot
+knowledge p1 1 blank
+knowledge p2 1 blank
+knowledge p1 2 live
+knowledge p2 2 live
+knowledge p1 3 live
+knowledge p2 3 live
+knowledge p1 4 live
+knowledge p2 4 live
+left blank 0
+next
+phase round_end
+turn p1
+phase item
+phase shoot
+left live 2
+next
+phase round_end
+hp p2 0
+clear
+game_end
