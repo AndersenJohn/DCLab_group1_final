@@ -14,22 +14,20 @@ class ItemState:
     handcuff: int = 0          # 手銬 - 對手下一回合不能行動
     phone: int = 0             # 一次性手機 - 查詢任意剩餘子彈 必須為序位靠後的子彈
     inverter: int = 0          # 逆轉器 - live <-> blank
-    adrenaline: int = 0        # 腎上腺素 - 偷一件對手物品並立刻使用
-    medicine: int = 0          # 藥品 - 50% 回復2HP 50% 扣1HP
+    #adrenaline: int = 0        # 腎上腺素 - 偷一件對手物品並立刻使用
+    #medicine: int = 0          # 藥品 - 50% 回復2HP 50% 扣1HP
 # ========================
 # 玩家資訊
 # ========================
 @dataclass
 class PlayerState:
     name: str
-    hp: int = 4
+    hp: int = 3
     items: ItemState = field(default_factory=ItemState)
 
     # 對彈匣的了解（None 表示不知道）
     bullet_knowledge: List[Optional[str]] = field(default_factory=list)
     
-    
-
     # 手銬效果（下一回合不能動）
     handcuffed: bool = False
 
@@ -55,26 +53,16 @@ class GameState:
     
     # 本次射擊狀態（非持續性）
     saw_active: bool = False
-    inverter_active: bool = False 
     # 階段
     phase: str = "load"
     """
-    load       = 裝彈階段 (default)
+    load       = 裝彈階段，發道具 (default)
     item  = 使用物品
     shoot = 射擊階段
-    resolve    = 結算射擊
     round_end  = 彈匣打完，準備下一輪補給
     game_end   = 其中一人死亡，遊戲結束
     """
-
-    # 道具補給池
-    loot_pool: List[str] = field(default_factory=list)
-
-    # AI 用
-    action_history: List[dict] = field(default_factory=list)
-    legal_actions: List[str] = field(default_factory=list)
-    reward: float = 0.0
-
+    
     # 工具方法
     def get_current_player(self) -> PlayerState:
         return self.p1 if self.turn == "p1" else self.p2
