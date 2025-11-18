@@ -2,6 +2,7 @@ import argparse
 import shlex
 import random
 from game_state import GameState
+from state_encoder_p2 import StateEncoder
 
 # ================================
 # 彈匣生成規則
@@ -56,6 +57,8 @@ def parse_command(command: str):
     subparsers = parser.add_subparsers(dest="action")
 
     subparsers.add_parser("show")
+    
+    subparsers.add_parser("state")
 
     use_parser = subparsers.add_parser("use")
     use_parser.add_argument("item")
@@ -78,10 +81,9 @@ def parse_command(command: str):
 # ================================
 ITEM_POOL = [
     "magnifier", "cigarette", "beer", "saw",
-    "handcuff", "phone", "inverter"
-]
+    "handcuff", "phone"]
 
-def give_random_items(player, amount=3):
+def give_random_items(player, amount=2):
     """每輪補 amount(=2) 個道具，但玩家最大只能有 6 個。"""
 
     # 計算現有道具總數
@@ -165,12 +167,6 @@ def handle_use(gs: GameState, item: str):
         chosen_bullet = gs.real_bullets[chosen_idx]
         player.bullet_knowledge[chosen_idx] = chosen_bullet
         print(f"一次性手機：倒數第 {total - chosen_idx} 發是 {chosen_bullet}")
-        
-    elif item == "inverter":
-        if gs.current_index < len(gs.real_bullets):
-            b = gs.real_bullets[gs.current_index]
-            gs.real_bullets[gs.current_index] = "blank" if b == "live" else "live"
-            print(f"逆轉器：{b} → {gs.real_bullets[gs.current_index]}")
     
     # 消耗道具
     setattr(player.items, item, getattr(player.items, item) - 1)
@@ -210,7 +206,17 @@ def handle_shoot(gs: GameState, target: str):
     if victim.hp <= 0:
         gs.phase = "game_end"
         print(f"{victim.name} 死亡 → 遊戲結束")
-
+        
+# ================================
+# RL State Encoder
+# ================================
+encoder = StateEncoder()
+def show_state_encoding(gs, encoder):
+    state_vec = encoder.encode(gs)
+    print("\n===== Encoded State =====")
+    print(state_vec)
+    print(f"Vector length = {len(state_vec)}")
+    print("=========================\n")
 
 # ================================
 # Main Loop (FSM)
@@ -238,8 +244,8 @@ def main_loop(gs: GameState):
             gs.p2.bullet_knowledge = [None] * size
             
             # 發放道具
-            give_random_items(gs.p1, amount=3)
-            give_random_items(gs.p2, amount=3)
+            give_random_items(gs.p1)
+            give_random_items(gs.p2)
             
             gs.phase = "item"
             continue
@@ -263,7 +269,10 @@ def main_loop(gs: GameState):
                 
             elif args.action == "show":
                 show(gs)
-                
+            
+            elif args.action == "state":
+                show_state_encoding(gs, encoder)
+            
             elif args.action == "use":
                 handle_use(gs, args.item)
             
@@ -277,6 +286,9 @@ def main_loop(gs: GameState):
 
             if args.action == "show":
                 show(gs)
+                
+            elif args.action == "state":
+                show_state_encoding(gs, encoder)    
 
             elif args.action == "shoot":
                 if args.target not in ("self", "enemy"):
@@ -285,13 +297,10 @@ def main_loop(gs: GameState):
                 handle_shoot(gs, args.target)
                 if gs.phase != "game_end":
                     if gs.current_index >= len(gs.real_bullets):
-                        gs.phase = "round_end"
+                        gs.phase = "load"
+                        print("\n=== 回合結束，準備下一輪 ===")
                     else:
                         gs.phase = "item"
-        # ========== round_end Phase ==========
-        if gs.phase == "round_end":
-            print("\n=== 回合結束，準備下一輪 ===")
-            gs.phase = "load"
         # ========== game_end Phase ==========
         if gs.phase == "game_end":
             print("\n=== 遊戲結束 ===")
