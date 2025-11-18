@@ -436,6 +436,12 @@ class BuckshotEnv(gym.Env):
 
         # P1's shoot phase
         if gs.phase == "shoot" and gs.turn == "p1":
+            # Check if bullets ran out before shooting
+            if gs.current_index >= len(gs.real_bullets):
+                self._load_new_round()
+                # After reload, might not be P1's turn anymore
+                return
+
             # Get action from model or random
             if self.opponent_model:
                 obs_p1 = self.encoder_p1.encode(gs)
