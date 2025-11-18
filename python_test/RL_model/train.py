@@ -100,7 +100,7 @@ def train(
     total_timesteps=1_000_000,
     n_envs=4,
     learning_rate=3e-4,
-    batch_size=64,
+    batch_size=256,
     n_steps=2048,
     n_epochs=10,
     opponent_update_freq=10000,
