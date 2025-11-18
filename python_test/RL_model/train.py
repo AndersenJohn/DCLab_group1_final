@@ -5,6 +5,7 @@ Self-play implementation using MaskablePPO from Stable-Baselines3
 
 import os
 import numpy as np
+import torch
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
 from sb3_contrib import MaskablePPO
@@ -127,6 +128,19 @@ def train(
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
 
+    # Check GPU availability
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        print(f"\n🚀 GPU detected: {gpu_name} ({gpu_memory:.1f} GB)")
+        print(f"   CUDA version: {torch.version.cuda}")
+        print(f"   Training device: {device}")
+    else:
+        print(f"\n⚠️  No GPU detected, using CPU")
+        print(f"   Training device: {device}")
+        print(f"   Consider installing CUDA for faster training")
+
     print("\n" + "="*60)
     print("Buckshot Roulette Self-Play Training")
     print("="*60)
@@ -159,7 +173,8 @@ def train(
         clip_range=0.2,       # PPO clip range
         ent_coef=0.01,        # Entropy coefficient (encourage exploration)
         verbose=1,
-        tensorboard_log=log_dir
+        tensorboard_log=log_dir,
+        device=device         # Use GPU if available, otherwise CPU
     )
 
     print(f"Model created! Total parameters: ~21,000")
