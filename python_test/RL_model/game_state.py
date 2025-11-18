@@ -22,7 +22,7 @@ class ItemState:
 @dataclass
 class PlayerState:
     name: str
-    hp: int = 3
+    hp: int = 4
     items: ItemState = field(default_factory=ItemState)
 
     # 對彈匣的了解（None 表示不知道）
