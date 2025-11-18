@@ -392,20 +392,37 @@ class BuckshotEnv(gym.Env):
         # Handle handcuff (skip turn)
         if gs.p1.handcuffed:
             if self.verbose:
-                print("  [P1 is handcuffed, skipping turn]")
+                print("\n[P1's turn - HANDCUFFED]")
+                print("  → Turn skipped")
             gs.p1.handcuffed = False
             gs.turn = "p2"
             gs.phase = "item"
             return
 
+        action_names = ["Shoot Enemy", "Shoot Self", "Use Magnifier", "Use Cigarette", "Use Beer",
+                       "Use Saw", "Use Handcuff", "Use Phone", "Ready (End Item Phase)"]
+
         # P1's item phase - use items or ready
         max_item_actions = 10  # Prevent infinite item usage
         item_actions_taken = 0
 
-        action_names = ["shoot_enemy", "shoot_self", "magnifier", "cigarette", "beer",
-                       "saw", "handcuff", "phone", "ready"]
-
         while gs.phase == "item" and gs.turn == "p1" and item_actions_taken < max_item_actions:
+            # Show P1's turn state
+            if self.verbose:
+                print(f"\n[P1's turn - ITEM]")
+                items = gs.p1.items
+                print(f"  Items: Mag:{items.magnifier} Cig:{items.cigarette} "
+                      f"Beer:{items.beer} Saw:{items.saw} Cuff:{items.handcuff} Phone:{items.phone}")
+
+                # Show P1's knowledge
+                known = [b for b in gs.p1.bullet_knowledge if b is not None]
+                if known:
+                    knowledge_str = "  Knows: " + ", ".join(
+                        f"#{i}={b}" for i, b in enumerate(gs.p1.bullet_knowledge)
+                        if b is not None
+                    )
+                    print(knowledge_str)
+
             # Get action from model or random
             if self.opponent_model:
                 obs_p1 = self.encoder_p1.encode(gs)
@@ -418,12 +435,10 @@ class BuckshotEnv(gym.Env):
                     action = 8  # ready
 
             if self.verbose:
-                print(f"  [P1: {action_names[action]}]", end="")
+                print(f"  → Action: {action_names[action]}")
 
             if action == 8:  # ready
                 gs.phase = "shoot"
-                if self.verbose:
-                    print()
                 break  # Exit item phase
             elif 2 <= action <= 7:
                 # Use item
@@ -433,28 +448,36 @@ class BuckshotEnv(gym.Env):
                     if getattr(gs.p1.items, item) > 0:
                         self._use_item(gs.p1, gs.p2, gs, item)
                         item_actions_taken += 1
-                        if self.verbose:
-                            print()
                     else:
                         # Invalid item, try ready instead
                         gs.phase = "shoot"
-                        if self.verbose:
-                            print(" → no items, ready")
                         break
                 else:
                     gs.phase = "shoot"
-                    if self.verbose:
-                        print(" → invalid, ready")
                     break
             else:
                 # Invalid action in item phase, go to shoot
                 gs.phase = "shoot"
-                if self.verbose:
-                    print(" → invalid, ready")
                 break
 
         # P1's shoot phase
         if gs.phase == "shoot" and gs.turn == "p1":
+            # Show P1's turn state
+            if self.verbose:
+                print(f"\n[P1's turn - SHOOT]")
+                items = gs.p1.items
+                print(f"  Items: Mag:{items.magnifier} Cig:{items.cigarette} "
+                      f"Beer:{items.beer} Saw:{items.saw} Cuff:{items.handcuff} Phone:{items.phone}")
+
+                # Show P1's knowledge
+                known = [b for b in gs.p1.bullet_knowledge if b is not None]
+                if known:
+                    knowledge_str = "  Knows: " + ", ".join(
+                        f"#{i}={b}" for i, b in enumerate(gs.p1.bullet_knowledge)
+                        if b is not None
+                    )
+                    print(knowledge_str)
+
             # Check if bullets ran out before shooting
             if gs.current_index >= len(gs.real_bullets):
                 self._load_new_round()
@@ -470,7 +493,7 @@ class BuckshotEnv(gym.Env):
                 action = random.randint(0, 1)
 
             if self.verbose:
-                print(f"  [P1: {action_names[action]}]")
+                print(f"  → Action: {action_names[action]}")
 
             if action == 0:  # shoot enemy (P2)
                 self._shoot(gs, gs.p1, gs.p2, target="enemy")
