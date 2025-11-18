@@ -29,12 +29,13 @@ class BuckshotEnv(gym.Env):
 
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self, opponent_model=None):
+    def __init__(self, opponent_model=None, verbose=False):
         super().__init__()
 
         self.encoder = StateEncoder(max_bullets=8)
         self.encoder_p1 = StateEncoderP1(max_bullets=8)
         self.opponent_model = opponent_model  # P1's model for self-play
+        self.verbose = verbose  # Print P1's actions for debugging
 
         # 動作空間
         self.action_space = spaces.Discrete(9)
@@ -390,6 +391,8 @@ class BuckshotEnv(gym.Env):
 
         # Handle handcuff (skip turn)
         if gs.p1.handcuffed:
+            if self.verbose:
+                print("  [P1 is handcuffed, skipping turn]")
             gs.p1.handcuffed = False
             gs.turn = "p2"
             gs.phase = "item"
@@ -398,6 +401,9 @@ class BuckshotEnv(gym.Env):
         # P1's item phase - use items or ready
         max_item_actions = 10  # Prevent infinite item usage
         item_actions_taken = 0
+
+        action_names = ["shoot_enemy", "shoot_self", "magnifier", "cigarette", "beer",
+                       "saw", "handcuff", "phone", "ready"]
 
         while gs.phase == "item" and gs.turn == "p1" and item_actions_taken < max_item_actions:
             # Get action from model or random
@@ -411,8 +417,13 @@ class BuckshotEnv(gym.Env):
                 else:
                     action = 8  # ready
 
+            if self.verbose:
+                print(f"  [P1: {action_names[action]}]", end="")
+
             if action == 8:  # ready
                 gs.phase = "shoot"
+                if self.verbose:
+                    print()
                 break  # Exit item phase
             elif 2 <= action <= 7:
                 # Use item
@@ -422,16 +433,24 @@ class BuckshotEnv(gym.Env):
                     if getattr(gs.p1.items, item) > 0:
                         self._use_item(gs.p1, gs.p2, gs, item)
                         item_actions_taken += 1
+                        if self.verbose:
+                            print()
                     else:
                         # Invalid item, try ready instead
                         gs.phase = "shoot"
+                        if self.verbose:
+                            print(" → no items, ready")
                         break
                 else:
                     gs.phase = "shoot"
+                    if self.verbose:
+                        print(" → invalid, ready")
                     break
             else:
                 # Invalid action in item phase, go to shoot
                 gs.phase = "shoot"
+                if self.verbose:
+                    print(" → invalid, ready")
                 break
 
         # P1's shoot phase
@@ -449,6 +468,9 @@ class BuckshotEnv(gym.Env):
             else:
                 # Random shoot action (0 or 1)
                 action = random.randint(0, 1)
+
+            if self.verbose:
+                print(f"  [P1: {action_names[action]}]")
 
             if action == 0:  # shoot enemy (P2)
                 self._shoot(gs, gs.p1, gs.p2, target="enemy")

@@ -24,8 +24,8 @@ def watch_game(model_path, num_games=5, delay=0.5):
     # Load trained model
     model = MaskablePPO.load(model_path)
 
-    # Create environment with self-play
-    env = BuckshotEnv(opponent_model=model)
+    # Create environment with self-play and verbose mode to see P1's actions
+    env = BuckshotEnv(opponent_model=model, verbose=True)
 
     action_names = [
         "Shoot Enemy", "Shoot Self",
