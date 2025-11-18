@@ -385,11 +385,7 @@ class BuckshotEnv(gym.Env):
     # P1 對手行為（使用 opponent_model）
     # ---------------------------------------------------------
     def _opponent_turn(self):
-        """Execute P1's turn using opponent model"""
-        if not self.opponent_model:
-            # No opponent model - skip P1's turn (for debugging)
-            return
-
+        """Execute P1's turn using opponent model or random policy"""
         gs = self.gs
 
         # Handle handcuff (skip turn)
@@ -399,13 +395,25 @@ class BuckshotEnv(gym.Env):
             gs.phase = "item"
             return
 
-        # P1's item phase
-        while gs.phase == "item" and gs.turn == "p1":
-            obs_p1 = self.encoder_p1.encode(gs)
-            action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+        # P1's item phase - use items or ready
+        max_item_actions = 10  # Prevent infinite item usage
+        item_actions_taken = 0
+
+        while gs.phase == "item" and gs.turn == "p1" and item_actions_taken < max_item_actions:
+            # Get action from model or random
+            if self.opponent_model:
+                obs_p1 = self.encoder_p1.encode(gs)
+                action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+            else:
+                # Random action when no model - bias towards ready to avoid infinite loop
+                if random.random() < 0.3:  # 30% chance to use item
+                    action = random.randint(2, 7)
+                else:
+                    action = 8  # ready
 
             if action == 8:  # ready
                 gs.phase = "shoot"
+                break  # Exit item phase
             elif 2 <= action <= 7:
                 # Use item
                 item_index = action - 2
@@ -413,23 +421,36 @@ class BuckshotEnv(gym.Env):
                     item = ITEM_LIST[item_index]
                     if getattr(gs.p1.items, item) > 0:
                         self._use_item(gs.p1, gs.p2, gs, item)
-            # Continue until ready
+                        item_actions_taken += 1
+                    else:
+                        # Invalid item, try ready instead
+                        gs.phase = "shoot"
+                        break
+                else:
+                    gs.phase = "shoot"
+                    break
+            else:
+                # Invalid action in item phase, go to shoot
+                gs.phase = "shoot"
+                break
 
         # P1's shoot phase
         if gs.phase == "shoot" and gs.turn == "p1":
-            obs_p1 = self.encoder_p1.encode(gs)
-            action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+            # Get action from model or random
+            if self.opponent_model:
+                obs_p1 = self.encoder_p1.encode(gs)
+                action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+            else:
+                # Random shoot action (0 or 1)
+                action = random.randint(0, 1)
 
             if action == 0:  # shoot enemy (P2)
                 self._shoot(gs, gs.p1, gs.p2, target="enemy")
             elif action == 1:  # shoot self
                 self._shoot(gs, gs.p1, gs.p1, target="self")
-
-            # Check if game ended
-            if gs.phase != "game_end":
-                # Switch turn back to P2
-                gs.turn = "p2"
-                gs.phase = "item"
+            else:
+                # Invalid action, default to shoot enemy
+                self._shoot(gs, gs.p1, gs.p2, target="enemy")
 
     # ---------------------------------------------------------
     # Action Masking（用於 MaskablePPO）
