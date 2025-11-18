@@ -27,6 +27,11 @@ def watch_game(model_path, num_games=5, delay=0.5):
     # Create environment with self-play and verbose mode to see P1's actions
     env = BuckshotEnv(opponent_model=model, verbose=True)
 
+    print("\n" + "="*70)
+    print("SELF-PLAY MODE: P1 and P2 are THE SAME MODEL")
+    print("The model plays against itself to demonstrate learned strategy")
+    print("="*70)
+
     action_names = [
         "Shoot Enemy", "Shoot Self",
         "Use Magnifier", "Use Cigarette", "Use Beer",
@@ -50,48 +55,40 @@ def watch_game(model_path, num_games=5, delay=0.5):
 
             # Show game state
             print(f"\n--- Step {step} ---")
-            print(f"Turn: {'P2 (Agent)' if gs.turn == 'p2' else 'P1 (Opponent)'} | Phase: {gs.phase.upper()}")
-            print(f"P1 HP: {gs.p1.hp} | P2 HP: {gs.p2.hp}")
+            print(f"HP: P1={gs.p1.hp} P2={gs.p2.hp} | Bullets: {gs.live_left}L {gs.blank_left}B")
 
-            # Show bullets
-            bullets_left = len(gs.real_bullets) - gs.current_index
-            print(f"Bullets: {gs.live_left} live, {gs.blank_left} blank ({bullets_left} total)")
+            # Determine whose turn and show their info
+            player = gs.p2 if gs.turn == "p2" else gs.p1
+            player_name = "P2" if gs.turn == "p2" else "P1"
 
-            # Show items (P2 only)
-            if gs.turn == "p2":
-                items_p2 = gs.p2.items
-                items_str = f"Items: Mag:{items_p2.magnifier} Cig:{items_p2.cigarette} " \
-                           f"Beer:{items_p2.beer} Saw:{items_p2.saw} Cuff:{items_p2.handcuff} " \
-                           f"Phone:{items_p2.phone}"
-                print(items_str)
+            print(f"[{player_name}'s turn - {gs.phase.upper()}]")
 
-                # Show knowledge
-                known_bullets = sum(1 for b in gs.p2.bullet_knowledge if b is not None)
-                if known_bullets > 0:
-                    knowledge_str = "Known: " + ", ".join(
-                        f"#{i}={b}" for i, b in enumerate(gs.p2.bullet_knowledge)
-                        if b is not None
-                    )
-                    print(knowledge_str)
+            # Show current player's items
+            items = player.items
+            items_str = f"  Items: Mag:{items.magnifier} Cig:{items.cigarette} " \
+                       f"Beer:{items.beer} Saw:{items.saw} Cuff:{items.handcuff} Phone:{items.phone}"
+            print(items_str)
 
-                # Get and display action
-                action_mask = env.action_masks()
-                action, _ = model.predict(obs, action_masks=action_mask, deterministic=False)
+            # Show current player's knowledge
+            known = [b for b in player.bullet_knowledge if b is not None]
+            if known:
+                knowledge_str = "  Knows: " + ", ".join(
+                    f"#{i}={b}" for i, b in enumerate(player.bullet_knowledge)
+                    if b is not None
+                )
+                print(knowledge_str)
 
-                print(f"→ P2 Action: {action_names[action]}")
+            # Get and display action (always P2, P1 handled in env)
+            action_mask = env.action_masks()
+            action, _ = model.predict(obs, action_masks=action_mask, deterministic=False)
 
-                # Take action
-                obs, reward, done, truncated, info = env.step(action)
+            print(f"  → Action: {action_names[action]}")
 
-                if reward != 0:
-                    print(f"  Reward: {reward:+.2f}")
-            else:
-                # P1's turn happens inside env.step() or reset()
-                # We just need to call step() once to advance
-                print("→ P1 (Opponent) taking turn...")
-                action_mask = env.action_masks()
-                action, _ = model.predict(obs, action_masks=action_mask, deterministic=False)
-                obs, reward, done, truncated, info = env.step(action)
+            # Take action (P1's turns happen automatically inside env.step)
+            obs, reward, done, truncated, info = env.step(action)
+
+            if reward != 0:
+                print(f"  Reward: {reward:+.2f}")
 
             step += 1
             time.sleep(delay)
