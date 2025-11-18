@@ -180,6 +180,12 @@ def train(
     print(f"Model created! Total parameters: ~21,000")
     print(f"Network: Input(30) → Hidden(128) → Hidden(128) → Output(9)\n")
 
+    # Initialize opponent model in all environments (important for self-play to work from start)
+    print("Initializing opponent model in all environments...")
+    for i in range(n_envs):
+        env.env_method("__setattr__", "opponent_model", model, indices=[i])
+    print(f"✓ Opponent model set in {n_envs} environments\n")
+
     # Create callbacks
     selfplay_callback = SelfPlayCallback(
         update_freq=opponent_update_freq,
