@@ -173,7 +173,7 @@ def train(
         clip_range=0.2,       # PPO clip range
         ent_coef=0.01,        # Entropy coefficient (encourage exploration)
         verbose=1,
-        tensorboard_log=log_dir,
+        tensorboard_log=None,
         device=device         # Use GPU if available, otherwise CPU
     )
 
