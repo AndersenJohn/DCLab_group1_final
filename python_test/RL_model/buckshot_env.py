@@ -4,6 +4,7 @@ from gym import spaces
 
 from game_state import GameState
 from state_encoder_p2 import StateEncoder
+from state_encoder_p1 import StateEncoder as StateEncoderP1
 
 import random
 
@@ -28,10 +29,12 @@ class BuckshotEnv(gym.Env):
 
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self):
+    def __init__(self, opponent_model=None):
         super().__init__()
 
         self.encoder = StateEncoder(max_bullets=8)
+        self.encoder_p1 = StateEncoderP1(max_bullets=8)
+        self.opponent_model = opponent_model  # P1's model for self-play
 
         # 動作空間
         self.action_space = spaces.Discrete(9)
@@ -54,6 +57,23 @@ class BuckshotEnv(gym.Env):
         self.gs = GameState()
         self._load_new_round()
 
+        # If P1 goes first, execute P1's turn before returning to P2
+        while self.gs.turn == "p1" and self.gs.phase != "game_end":
+            self._opponent_turn()
+
+            # Check if bullets ran out after P1's turn
+            if self.gs.current_index >= len(self.gs.real_bullets):
+                self._load_new_round()
+                # Might be P1's turn again
+                if self.gs.turn != "p2":
+                    continue
+                else:
+                    break
+
+            # Break if it's now P2's turn
+            if self.gs.turn == "p2":
+                break
+
         return self.encoder.encode(self.gs), {}
 
     # ---------------------------------------------------------
@@ -66,7 +86,7 @@ class BuckshotEnv(gym.Env):
         done = False
         info = {}
 
-        # ---------- P2 必須在 item phase / shoot phase 決策 ----------
+        # ---------- P2 行動 (item phase / shoot phase) ----------
         if gs.phase == "item":
             reward += self._apply_item_action(action)
 
@@ -82,6 +102,32 @@ class BuckshotEnv(gym.Env):
         # ---------- 如果子彈打完，自動 load 下一 round ----------
         if gs.current_index >= len(gs.real_bullets):
             self._load_new_round()
+
+        # ---------- P1 對手回合 (如果有 opponent_model) ----------
+        # Keep executing P1's turns until it's P2's turn again or game ends
+        while gs.turn == "p1" and gs.phase != "game_end":
+            self._opponent_turn()
+
+            # Check if game ended after P1's action
+            if gs.phase == "game_end":
+                done = True
+                reward += self._calc_terminal_reward()
+                return self.encoder.encode(gs), reward, done, False, info
+
+            # Check if bullets ran out
+            if gs.current_index >= len(gs.real_bullets):
+                self._load_new_round()
+                # After reload, it might be P1's turn again
+                if gs.turn != "p2":
+                    continue
+                else:
+                    break
+
+            # If still P1's turn (shot self with blank), continue
+            if gs.turn == "p1":
+                continue
+            else:
+                break
 
         return self.encoder.encode(gs), reward, done, False, info
 
@@ -100,7 +146,8 @@ class BuckshotEnv(gym.Env):
 
         gs.current_index = 0
         gs.phase = "item"
-        gs.turn = "p1"     # 每回合 P1 先行？你可改規則
+        # Randomize who goes first each round for fairness
+        gs.turn = random.choice(["p1", "p2"])
 
         size = len(gs.real_bullets)
         gs.p1.bullet_knowledge = [None] * size
@@ -112,7 +159,7 @@ class BuckshotEnv(gym.Env):
     # ---------------------------------------------------------
     # 給道具
     # ---------------------------------------------------------
-    def _give_items(self, player, amount=2):
+    def _give_items(self, player, amount=3):
         total = sum(vars(player.items).values())
         if total >= 6:
             return
@@ -147,7 +194,7 @@ class BuckshotEnv(gym.Env):
             item = ITEM_LIST[item_index]
 
             if getattr(p.items, item) <= 0:
-                return -0.1    # 用不了，輕微懲罰
+                return -1    # 用不了，輕微懲罰
 
             reward += self._use_item(p, o, gs, item)
 
@@ -163,12 +210,48 @@ class BuckshotEnv(gym.Env):
 
         reward = 0
 
+        # Check if player knows the next bullet
+        next_bullet_known = None
+        if gs.current_index < len(p.bullet_knowledge):
+            next_bullet_known = p.bullet_knowledge[gs.current_index]
+
         if action == 0:   # shoot enemy
-            reward += self._shoot(gs, p, o)
+            # Combo bonus: Using saw when you KNOW it's live
+            if gs.saw_active and next_bullet_known == "live":
+                reward += 0.35  # Smart combo!
+
+            # Penalty: Shooting enemy when you KNOW it's blank
+            if next_bullet_known == "blank":
+                reward -= 0.4  # Terrible decision
+
+            # Bonus: Shooting when you know it's live (without saw)
+            elif next_bullet_known == "live":
+                reward += 0.2  # Good decision
+
+            reward += self._shoot(gs, p, o, target="enemy")
+
         elif action == 1: # shoot self
-            reward += self._shoot(gs, p, p)
+            # Bonus: Shooting self when you KNOW it's blank (extra turn)
+            if next_bullet_known == "blank":
+                reward += 0.3  # Excellent decision!
+
+            # Penalty: Shooting self when you KNOW it's live
+            elif next_bullet_known == "live":
+                reward -= 0.5  # Why would you do this?!
+
+            reward += self._shoot(gs, p, p, target="self")
+
+        elif 2 <= action <= 7:
+            # Trying to use items during shoot phase - invalid!
+            reward -= 1.0
+
+        elif action == 8:
+            # Trying to "ready" during shoot phase - invalid!
+            reward -= 1.0
+
         else:
-            reward -= 0.2   # 射擊階段做奇怪行為懲罰
+            # Any other invalid action
+            reward -= 1.0
 
         return reward
 
@@ -180,13 +263,24 @@ class BuckshotEnv(gym.Env):
 
         if item == "magnifier":
             if gs.current_index < len(gs.real_bullets):
-                k = gs.real_bullets[gs.current_index]
-                player.bullet_knowledge[gs.current_index] = k
-                reward += 0.05
+                # Penalize using magnifier when all remaining bullets are known
+                if gs.live_left == 0 or gs.blank_left == 0:
+                    # Wasteful - you already know what all bullets are!
+                    k = gs.real_bullets[gs.current_index]
+                    player.bullet_knowledge[gs.current_index] = k
+                    reward -= 0.3
+                else:
+                    k = gs.real_bullets[gs.current_index]
+                    player.bullet_knowledge[gs.current_index] = k
+                    reward += 0.3
 
         elif item == "cigarette":
-            player.hp += 1
-            reward += 0.1
+            if player.hp >= 4:
+                player.hp = 4
+                reward -= 0.5
+            else:
+                player.hp += 1
+                reward += 0.3
 
         elif item == "beer":
             if gs.current_index < len(gs.real_bullets):
@@ -194,21 +288,23 @@ class BuckshotEnv(gym.Env):
 
                 if removed == "live":
                     gs.live_left -= 1
+                    reward += 0.15  # Good! Removed danger
                 else:
                     gs.blank_left -= 1
+                    reward += 0.08  # OK, got info
 
                 player.bullet_knowledge[gs.current_index] = removed
                 opponent.bullet_knowledge[gs.current_index] = removed
 
                 gs.current_index += 1
-                reward += 0.1
 
         elif item == "saw":
             gs.saw_active = True
+            reward += 0.15  # Powerful item
 
         elif item == "handcuff":
             opponent.handcuffed = True
-            reward += 0.05
+            reward += 0.3  # Strong control
 
         elif item == "phone":
             total = len(gs.real_bullets)
@@ -226,7 +322,7 @@ class BuckshotEnv(gym.Env):
     # ---------------------------------------------------------
     # 射擊邏輯
     # ---------------------------------------------------------
-    def _shoot(self, gs, shooter, victim):
+    def _shoot(self, gs, shooter, victim, target="enemy"):
         reward = 0
 
         bullet = gs.real_bullets[gs.current_index]
@@ -241,15 +337,38 @@ class BuckshotEnv(gym.Env):
 
             if victim.hp <= 0:
                 gs.phase = "game_end"
+                return reward
 
             if victim is shooter:
-                reward -= dmg * 0.2
+                # Shot self with live - bad!
+                reward -= dmg * 1.0
             else:
-                reward += dmg * 0.2
+                # Shot enemy with live - good!
+                base_reward = dmg * 0.4
+
+                # Bonus for finishing off low HP opponent
+                if victim.hp <= 1 and victim.hp > -dmg:
+                    base_reward += 0.3  # Close to winning
+
+                reward += base_reward
+
+            # Turn switches after shooting live (regardless of target)
+            gs.turn = "p2" if gs.turn == "p1" else "p1"
+            gs.phase = "item"
 
         else:  # blank
             gs.blank_left -= 1
-            reward -= 0.02
+
+            if target == "self":
+                # Shot self with blank - GOOD! (Extra turn)
+                reward += 0.15
+                # Keep same turn (extra turn!)
+            else:
+                # Shot enemy with blank - wasted turn
+                reward -= 0.1
+                # Turn switches
+                gs.turn = "p2" if gs.turn == "p1" else "p1"
+                gs.phase = "item"
 
         return reward
 
@@ -258,9 +377,93 @@ class BuckshotEnv(gym.Env):
     # ---------------------------------------------------------
     def _calc_terminal_reward(self):
         if self.gs.p2.hp > 0 and self.gs.p1.hp <= 0:
-            return +1
+            return +10  # Victory!
         else:
-            return -1
+            return -10  # Defeat
+
+    # ---------------------------------------------------------
+    # P1 對手行為（使用 opponent_model）
+    # ---------------------------------------------------------
+    def _opponent_turn(self):
+        """Execute P1's turn using opponent model"""
+        if not self.opponent_model:
+            # No opponent model - skip P1's turn (for debugging)
+            return
+
+        gs = self.gs
+
+        # Handle handcuff (skip turn)
+        if gs.p1.handcuffed:
+            gs.p1.handcuffed = False
+            gs.turn = "p2"
+            gs.phase = "item"
+            return
+
+        # P1's item phase
+        while gs.phase == "item" and gs.turn == "p1":
+            obs_p1 = self.encoder_p1.encode(gs)
+            action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+
+            if action == 8:  # ready
+                gs.phase = "shoot"
+            elif 2 <= action <= 7:
+                # Use item
+                item_index = action - 2
+                if 0 <= item_index < len(ITEM_LIST):
+                    item = ITEM_LIST[item_index]
+                    if getattr(gs.p1.items, item) > 0:
+                        self._use_item(gs.p1, gs.p2, gs, item)
+            # Continue until ready
+
+        # P1's shoot phase
+        if gs.phase == "shoot" and gs.turn == "p1":
+            obs_p1 = self.encoder_p1.encode(gs)
+            action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+
+            if action == 0:  # shoot enemy (P2)
+                self._shoot(gs, gs.p1, gs.p2, target="enemy")
+            elif action == 1:  # shoot self
+                self._shoot(gs, gs.p1, gs.p1, target="self")
+
+            # Check if game ended
+            if gs.phase != "game_end":
+                # Switch turn back to P2
+                gs.turn = "p2"
+                gs.phase = "item"
+
+    # ---------------------------------------------------------
+    # Action Masking（用於 MaskablePPO）
+    # ---------------------------------------------------------
+    def action_masks(self):
+        """
+        Returns binary mask for valid actions.
+        1 = valid action, 0 = invalid action
+        Required by MaskablePPO from sb3-contrib
+        """
+        gs = self.gs
+        mask = np.zeros(9, dtype=np.int8)
+
+        if gs.phase == "item":
+            # Item phase: can use items (2-7) or ready (8)
+            p = gs.p2
+
+            # Action 2-7: Use items (only if you have them)
+            mask[2] = 1 if p.items.magnifier > 0 else 0
+            mask[3] = 1 if p.items.cigarette > 0 else 0
+            mask[4] = 1 if p.items.beer > 0 else 0
+            mask[5] = 1 if p.items.saw > 0 else 0
+            mask[6] = 1 if p.items.handcuff > 0 else 0
+            mask[7] = 1 if p.items.phone > 0 else 0
+
+            # Action 8: Ready (always valid in item phase)
+            mask[8] = 1
+
+        elif gs.phase == "shoot":
+            # Shoot phase: can only shoot (0 or 1)
+            mask[0] = 1  # shoot enemy
+            mask[1] = 1  # shoot self
+
+        return mask
 
     # ---------------------------------------------------------
     # render（debug）
