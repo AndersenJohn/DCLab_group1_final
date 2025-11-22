@@ -203,7 +203,8 @@ def train(
         "MlpPolicy",
         env,
         policy_kwargs=dict(
-            net_arch=[128, 128]  # Two hidden layers: 30 → 128 → 128 → 9
+            net_arch=[128, 128],  # Two hidden layers: 30 → 128 → 128 → 9
+            activation_fn=torch.nn.ReLU  # Change from default Tanh to ReLU
         ),
         learning_rate=learning_rate,
         n_steps=n_steps,
