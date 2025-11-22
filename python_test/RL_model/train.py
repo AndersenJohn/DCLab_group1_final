@@ -16,14 +16,19 @@ class SelfPlayCallback(BaseCallback):
     """
     Callback to update opponent model periodically during self-play training
     """
-    def __init__(self, update_freq=10000, verbose=1):
+    def __init__(self, update_freq=10000, metrics_callback=None, verbose=1):
         super().__init__(verbose)
         self.update_freq = update_freq
         self.opponent_update_count = 0
+        self.metrics_callback = metrics_callback
 
     def _on_step(self) -> bool:
         # Update opponent every update_freq steps
         if self.n_calls % self.update_freq == 0:
+            # Show interval stats before updating
+            if self.metrics_callback and self.verbose > 0:
+                self.metrics_callback.print_interval_stats(self.opponent_update_count)
+
             if self.verbose > 0:
                 print(f"\n{'='*60}")
                 print(f"Updating opponent model at step {self.n_calls}")
@@ -35,6 +40,10 @@ class SelfPlayCallback(BaseCallback):
                 env.opponent_model = self.model
 
             self.opponent_update_count += 1
+
+            # Reset interval counters
+            if self.metrics_callback:
+                self.metrics_callback.reset_interval()
 
         return True
 
@@ -48,8 +57,31 @@ class MetricsCallback(BaseCallback):
         self.check_freq = check_freq
         self.episode_rewards = []
         self.episode_lengths = []
+
+        # Cumulative stats (across all training)
         self.wins = 0
         self.losses = 0
+
+        # Interval stats (reset when opponent is updated)
+        self.interval_wins = 0
+        self.interval_losses = 0
+
+    def reset_interval(self):
+        """Reset interval counters when opponent is updated"""
+        self.interval_wins = 0
+        self.interval_losses = 0
+
+    def print_interval_stats(self, interval_num):
+        """Print statistics for the current interval before resetting"""
+        interval_games = self.interval_wins + self.interval_losses
+        if interval_games > 0:
+            interval_wr = self.interval_wins / interval_games
+            print(f"\n{'='*60}")
+            print(f"INTERVAL {interval_num} SUMMARY (vs frozen opponent)")
+            print(f"{'='*60}")
+            print(f"Interval Win Rate: {interval_wr:.2%} ({self.interval_wins}W / {self.interval_losses}L)")
+            print(f"Games Played: {interval_games}")
+            print(f"{'='*60}")
 
     def _on_step(self) -> bool:
         # Check done episodes
@@ -66,22 +98,31 @@ class MetricsCallback(BaseCallback):
                     self.episode_lengths.append(ep_length)
 
                     # Track wins/losses (positive terminal reward = win)
-                    if ep_reward > 5:  # Win gives +10 + other rewards
+                    is_win = ep_reward > 5  # Win gives +10 + other rewards
+
+                    # Update cumulative stats
+                    if is_win:
                         self.wins += 1
-                    else:  # Loss gives -10 + other rewards
+                        self.interval_wins += 1
+                    else:
                         self.losses += 1
+                        self.interval_losses += 1
 
         # Log metrics periodically
         if self.n_calls % self.check_freq == 0 and len(self.episode_rewards) > 0:
             total_games = self.wins + self.losses
-            win_rate = self.wins / total_games if total_games > 0 else 0
+            cumulative_wr = self.wins / total_games if total_games > 0 else 0
+
+            interval_games = self.interval_wins + self.interval_losses
+            interval_wr = self.interval_wins / interval_games if interval_games > 0 else 0
 
             avg_reward = np.mean(self.episode_rewards[-100:])
             avg_length = np.mean(self.episode_lengths[-100:])
 
             print(f"\n{'='*60}")
             print(f"Step: {self.n_calls}")
-            print(f"Win Rate: {win_rate:.2%} ({self.wins}W / {self.losses}L)")
+            print(f"Cumulative Win Rate: {cumulative_wr:.2%} ({self.wins}W / {self.losses}L)")
+            print(f"Current Interval Win Rate: {interval_wr:.2%} ({self.interval_wins}W / {self.interval_losses}L)")
             print(f"Avg Reward (last 100): {avg_reward:.2f}")
             print(f"Avg Episode Length (last 100): {avg_length:.1f}")
             print(f"{'='*60}\n")
@@ -162,7 +203,8 @@ def train(
         "MlpPolicy",
         env,
         policy_kwargs=dict(
-            net_arch=[128, 128]  # Two hidden layers: 30 → 128 → 128 → 9
+            net_arch=[128, 128],  # Two hidden layers: 30 → 128 → 128 → 9
+            activation_fn=torch.nn.ReLU  # Change from default Tanh to ReLU
         ),
         learning_rate=learning_rate,
         n_steps=n_steps,
@@ -187,13 +229,14 @@ def train(
     print(f"✓ Opponent model set in {n_envs} environments\n")
 
     # Create callbacks
-    selfplay_callback = SelfPlayCallback(
-        update_freq=opponent_update_freq,
+    metrics_callback = MetricsCallback(
+        check_freq=1000,
         verbose=1
     )
 
-    metrics_callback = MetricsCallback(
-        check_freq=1000,
+    selfplay_callback = SelfPlayCallback(
+        update_freq=opponent_update_freq,
+        metrics_callback=metrics_callback,
         verbose=1
     )
 
