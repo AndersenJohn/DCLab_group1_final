@@ -232,10 +232,16 @@ def train(
     print(f"Network: Input(33) → Hidden(128) → Hidden(128) → Output(10)\n")
 
     # Initialize opponent model in all environments (important for self-play to work from start)
+    # Create a frozen copy to ensure opponent doesn't update during first interval
     print("Initializing opponent model in all environments...")
-    for i in range(n_envs):
-        env.env_method("__setattr__", "opponent_model", model, indices=[i])
-    print(f"✓ Opponent model set in {n_envs} environments\n")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_path = os.path.join(tmpdir, "initial_opponent")
+        model.save(temp_path)
+        initial_opponent = MaskablePPO.load(temp_path, device=device)
+
+        for env_obj in env.envs:
+            env_obj.opponent_model = initial_opponent
+    print(f"✓ Opponent model set in {n_envs} environments (frozen copy)\n")
 
     # Create callbacks
     metrics_callback = MetricsCallback(
