@@ -27,13 +27,12 @@ class BuckshotEnv(gym.Env):
 
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self, opponent_model=None, verbose=False):
+    def __init__(self, opponent_model=None):
         super().__init__()
 
         self.encoder = StateEncoder(max_bullets=8)
         self.encoder_p1 = StateEncoderP1(max_bullets=8)
         self.opponent_model = opponent_model  # P1's model for self-play
-        self.verbose = verbose  # Print P1's actions for debugging
 
         # 動作空間
         # 0: shoot enemy, 1: shoot self, 2..8: use items (7 items), 9: ready
@@ -87,10 +86,8 @@ class BuckshotEnv(gym.Env):
         info = {}
 
         # If P2 is handcuffed, skip P2's turn immediately and give control to P1
-        # This mirrors the logic in _opponent_turn for P1 being handcuffed.
+        # Clear the handcuff and pass the turn to P1
         if gs.turn == "p2" and gs.phase == "item" and gs.p2.handcuffed:
-            if self.verbose:
-                print(f"\n[P2 is handcuffed] Skipping P2's turn")
             gs.p2.handcuffed = False
             gs.turn = "p1"
             gs.phase = "item"
@@ -395,20 +392,16 @@ class BuckshotEnv(gym.Env):
                 # flipped effect but consume original (live) count
                 if victim == shooter:
                     gs.live_left -= 1
-                    print(f"砰！空包彈 → {victim.name} 無傷")
                     gs.turn = "p1" if gs.turn == "p1" else "p2"
                 else:
                     gs.live_left -= 1
-                    print(f"砰！空包彈 → {victim.name} 無傷")
                     gs.turn = "p2" if gs.turn == "p1" else "p1"
             else:
                 if victim == shooter:
                     gs.blank_left -= 1
-                    print(f"砰！空包彈 → {victim.name} 無傷")
                     gs.turn = "p1" if gs.turn == "p1" else "p2"
                 else:
                     gs.blank_left -= 1
-                    print(f"砰！空包彈 → {victim.name} 無傷")
                     gs.turn = "p2" if gs.turn == "p1" else "p1"
 
         else:  # effect_bullet == live
@@ -416,23 +409,19 @@ class BuckshotEnv(gym.Env):
                 # flipped effect but consume original (blank) count
                 if victim == shooter:
                     gs.blank_left -= 1
-                    print(f"砰！實彈 → {victim.name} 受傷")
                     victim.hp -= dmg
                     gs.turn = "p2" if gs.turn == "p1" else "p1"
                 else:
                     gs.blank_left -= 1
-                    print(f"砰！實彈 → {victim.name} 受傷")
                     victim.hp -= dmg
                     gs.turn = "p2" if gs.turn == "p1" else "p1"
             else:
                 if victim == shooter:
                     gs.live_left -= 1
-                    print(f"砰！實彈 → {victim.name} 受傷")
                     victim.hp -= dmg
                     gs.turn = "p2" if gs.turn == "p1" else "p1"
                 else:
                     gs.live_left -= 1
-                    print(f"砰！實彈 → {victim.name} 受傷")
                     victim.hp -= dmg
                     gs.turn = "p2" if gs.turn == "p1" else "p1"
 
@@ -443,7 +432,6 @@ class BuckshotEnv(gym.Env):
 
         if victim.hp <= 0:
             gs.phase = "game_end"
-            print(f"{victim.name} 死亡 → 遊戲結束")
 
         return reward
 
@@ -465,37 +453,19 @@ class BuckshotEnv(gym.Env):
 
         # Handle handcuff (skip turn)
         if gs.p1.handcuffed:
-            if self.verbose:
-                print("\n[P1's turn - HANDCUFFED]")
-                print("  → Turn skipped")
+            # Clear handcuff and pass the turn to P2
             gs.p1.handcuffed = False
             gs.turn = "p2"
             gs.phase = "item"
             return
 
-        action_names = ["Shoot Enemy", "Shoot Self", "Use Magnifier", "Use Cigarette", "Use Beer",
-                "Use Saw", "Use Handcuff", "Use Phone", "Use Reverse", "Ready (End Item Phase)"]
+        # action name labels removed (debug prints removed)
 
         # P1's item phase - use items or ready
         max_item_actions = 6  # Prevent infinite item usage
         item_actions_taken = 0
 
         while gs.phase == "item" and gs.turn == "p1" and item_actions_taken < max_item_actions:
-            # Show P1's turn state
-            if self.verbose:
-                print(f"\n[P1's turn - ITEM]")
-                items = gs.p1.items
-                print(f"  Items: Mag:{items.magnifier} Cig:{items.cigarette} "
-                      f"Beer:{items.beer} Saw:{items.saw} Cuff:{items.handcuff} Phone:{items.phone}")
-
-                # Show P1's knowledge
-                known = [b for b in gs.p1.bullet_knowledge if b is not None]
-                if known:
-                    knowledge_str = "  Knows: " + ", ".join(
-                        f"#{i}={b}" for i, b in enumerate(gs.p1.bullet_knowledge)
-                        if b is not None
-                    )
-                    print(knowledge_str)
 
             # Get action from model or random
             if self.opponent_model:
@@ -508,8 +478,7 @@ class BuckshotEnv(gym.Env):
                 else:
                     action = 9  # ready
 
-            if self.verbose:
-                print(f"  → Action: {action_names[action]}")
+            # action logging removed
 
             if action == 9:  # ready
                 gs.phase = "shoot"
@@ -536,22 +505,7 @@ class BuckshotEnv(gym.Env):
 
         # P1's shoot phase
         if gs.phase == "shoot" and gs.turn == "p1":
-            # Show P1's turn state
-            if self.verbose:
-                print(f"\n[P1's turn - SHOOT]")
-                items = gs.p1.items
-                print(f"  Items: Mag:{items.magnifier} Cig:{items.cigarette} "
-                      f"Beer:{items.beer} Saw:{items.saw} Cuff:{items.handcuff} Phone:{items.phone}")
-
-                # Show P1's knowledge
-                known = [b for b in gs.p1.bullet_knowledge if b is not None]
-                if known:
-                    knowledge_str = "  Knows: " + ", ".join(
-                        f"#{i}={b}" for i, b in enumerate(gs.p1.bullet_knowledge)
-                        if b is not None
-                    )
-                    print(knowledge_str)
-
+            # P1 shoot phase (debug output removed)
             # Check if bullets ran out before shooting
             if gs.current_index >= len(gs.real_bullets):
                 self._load_new_round()
@@ -566,8 +520,6 @@ class BuckshotEnv(gym.Env):
                 # Random shoot action (0 or 1)
                 action = random.randint(0, 1)
 
-            if self.verbose:
-                print(f"  → Action: {action_names[action]}")
 
             if action == 0:  # shoot enemy (P2)
                 self._shoot(gs, gs.p1, gs.p2, target="enemy")
@@ -611,10 +563,3 @@ class BuckshotEnv(gym.Env):
             mask[1] = 1  # shoot self
 
         return mask
-
-    # ---------------------------------------------------------
-    # render（debug）
-    # ---------------------------------------------------------
-    def render(self):
-        print(f"P1 HP={self.gs.p1.hp}, P2 HP={self.gs.p2.hp}, phase={self.gs.phase}")
-        print(f"Bullets: {self.gs.real_bullets}, idx={self.gs.current_index}")
