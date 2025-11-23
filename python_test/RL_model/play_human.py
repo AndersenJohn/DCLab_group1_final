@@ -23,6 +23,7 @@ class HumanPlayer:
             "Use Saw",
             "Use Handcuff",
             "Use Phone",
+            "use Reverse"
             "Ready"
         ]
 
@@ -42,7 +43,9 @@ class HumanPlayer:
         print(f"  [5] Saw: {items.saw} (2x damage)")
         print(f"  [6] Handcuff: {items.handcuff} (skip opponent turn)")
         print(f"  [7] Phone: {items.phone} (reveal random bullet)")
-
+        print(f"  [8] Reverse: {items.reverse} (swap bullets with opponent)")
+        print(f"  [9] Ready")
+        
         # Show your knowledge
         known = [(i, b) for i, b in enumerate(player_state.bullet_knowledge) if b is not None]
         if known:

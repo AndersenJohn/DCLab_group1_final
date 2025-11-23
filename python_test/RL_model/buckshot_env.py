@@ -243,17 +243,12 @@ class BuckshotEnv(gym.Env):
             next_bullet_known = p.bullet_knowledge[gs.current_index]
 
         if action == 0:   # shoot enemy
-            # Combo bonus: Using saw when you KNOW it's live
-            if gs.saw_active and next_bullet_known == "live":
-                reward += 2.0  # Smart combo!
-
-            # Penalty: Shooting enemy when you KNOW it's blank
+            # Knowledge-based rewards. If saw is active and it's live, give a larger
+            # reward for the correct decision but avoid double-counting.
             if next_bullet_known == "blank":
                 reward -= 2.0  # Terrible decision
-
-            # Bonus: Shooting when you know it's live (without saw)
             elif next_bullet_known == "live":
-                reward += 1.0  # Good decision
+                reward += 2.0 if gs.saw_active else 1.0
 
             reward += self._shoot(gs, p, o, target="enemy")
 
@@ -314,10 +309,15 @@ class BuckshotEnv(gym.Env):
                     reward -= 0.5
                 else:
                     reward += 0.15
-                
-                removed = gs.real_bullets.pop(gs.current_index)
-                player.bullet_knowledge[gs.current_index] = removed
-                opponent.bullet_knowledge[gs.current_index] = removed
+  
+                removed = gs.real_bullets[gs.current_index]
+                if gs.current_index < len(player.bullet_knowledge):
+                    player.bullet_knowledge[gs.current_index] = removed
+                if gs.current_index < len(opponent.bullet_knowledge):
+                    opponent.bullet_knowledge[gs.current_index] = removed
+
+                gs.real_bullets[gs.current_index] = None
+
                 if removed == "live":
                     gs.live_left -= 1
                 else:
@@ -326,12 +326,12 @@ class BuckshotEnv(gym.Env):
                 
         elif item == "saw":
             gs.saw_active = True
-            if player.bullet_knowledge[gs.current_index] == "live":
-                reward += 1.0  
-            elif player.bullet_knowledge[gs.current_index] == "blank":
+            if gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "live":
+                reward += 1.0
+            elif gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "blank":
                 reward -= 1.0
             else:
-                reward += 0.15 
+                reward += 0.15
                 
         elif item == "handcuff":
             opponent.handcuffed = True
@@ -357,13 +357,12 @@ class BuckshotEnv(gym.Env):
 
         elif item == "reverse":
             gs.reverse_active = True
-            
-            if player.bullet_knowledge[gs.current_index] == "live":
+            if gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "live":
                 reward -= 1.0
-            elif player.bullet_knowledge[gs.current_index] == "blank":
+            elif gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "blank":
                 reward -= 1.0
             else:
-                 reward += 0.15
+                reward += 0.15
    
         setattr(player.items, item, getattr(player.items, item) - 1)
 
@@ -429,6 +428,16 @@ class BuckshotEnv(gym.Env):
         shooter.bullet_knowledge[gs.current_index - 1] = effect_bullet
         opponent = gs.p1 if shooter is gs.p2 else gs.p2
         opponent.bullet_knowledge[gs.current_index - 1] = effect_bullet
+
+        # Give small, immediate reward for damage from the perspective of P2
+        if effect_bullet == "live":
+            if shooter is gs.p2:
+                # P2 hit P1
+                if victim is gs.p1:
+                    reward += 1.0
+                # P2 hit self
+                elif victim is gs.p2:
+                    reward -= 1.0
 
         if victim.hp <= 0:
             gs.phase = "game_end"
