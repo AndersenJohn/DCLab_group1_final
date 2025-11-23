@@ -309,21 +309,20 @@ class BuckshotEnv(gym.Env):
                     reward -= 0.5
                 else:
                     reward += 0.15
-  
-                removed = gs.real_bullets[gs.current_index]
-                if gs.current_index < len(player.bullet_knowledge):
-                    player.bullet_knowledge[gs.current_index] = removed
-                if gs.current_index < len(opponent.bullet_knowledge):
-                    opponent.bullet_knowledge[gs.current_index] = removed
+            removed = gs.real_bullets.pop(gs.current_index)
 
-                gs.real_bullets[gs.current_index] = None
+            # reveal 給雙方
+            player.bullet_knowledge[gs.current_index] = removed
+            opponent.bullet_knowledge[gs.current_index] = removed
 
-                if removed == "live":
-                    gs.live_left -= 1
-                else:
-                    gs.blank_left -= 1
-                gs.current_index += 1
-                
+            # 更新 live / blank 數量
+            if removed == "live":
+                gs.live_left -= 1
+            else:
+                gs.blank_left -= 1
+
+            gs.current_index += 1
+                    
         elif item == "saw":
             gs.saw_active = True
             if gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "live":
