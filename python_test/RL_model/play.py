@@ -24,8 +24,8 @@ def watch_game(model_path, num_games=5, delay=0.5):
     # Load trained model
     model = MaskablePPO.load(model_path)
 
-    # Create environment with self-play and verbose mode to see P1's actions
-    env = BuckshotEnv(opponent_model=model, verbose=True)
+    # Create environment with self-play 
+    env = BuckshotEnv(opponent_model=model)
 
     print("\n" + "="*70)
     print("SELF-PLAY MODE: P1 and P2 are THE SAME MODEL")
