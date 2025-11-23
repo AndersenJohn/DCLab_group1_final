@@ -23,6 +23,8 @@ def test_environment(num_episodes=10, max_steps_per_episode=200, verbose=True):
     print("="*60)
 
     env = BuckshotEnv(opponent_model=None)  # No opponent model - uses random actions
+    # Sanity check: action space should match buckshot_env (10 actions: 0..9)
+    assert env.action_space.n == 10, f"Expected env.action_space.n == 10, got {env.action_space.n}"
 
     total_steps = 0
     wins = 0
@@ -67,7 +69,7 @@ def test_environment(num_episodes=10, max_steps_per_episode=200, verbose=True):
                     action_names = [
                         "shoot_enemy", "shoot_self",
                         "magnifier", "cigarette", "beer", "saw", "handcuff", "phone",
-                        "ready"
+                        "reverse", "ready"
                     ]
 
                     print(f"Step {step_count:3d} | Phase: {phase:5s} | Turn: {turn} | " +
@@ -153,7 +155,7 @@ if __name__ == "__main__":
     parser.add_argument("--quick", action="store_true", help="Quick test (5 episodes)")
     parser.add_argument("--thorough", action="store_true", help="Thorough test (20 episodes)")
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
-    parser.add_argument("--episodes", type=int, default=1000, help="Number of episodes")
+    parser.add_argument("--episodes", type=int, default=100, help="Number of episodes")
 
     args = parser.parse_args()
 

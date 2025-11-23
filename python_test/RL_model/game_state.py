@@ -13,7 +13,7 @@ class ItemState:
     saw: int = 0               # 手鋸 - 2倍傷害
     handcuff: int = 0          # 手銬 - 對手下一回合不能行動
     phone: int = 0             # 一次性手機 - 查詢任意剩餘子彈 必須為序位靠後的子彈
-    #inverter: int = 0          # 逆轉器 - live <-> blank
+    reverse: int = 0          # 逆轉器 - live <-> blank
     #adrenaline: int = 0        # 腎上腺素 - 偷一件對手物品並立刻使用
     #medicine: int = 0          # 藥品 - 50% 回復2HP 50% 扣1HP
 # ========================
@@ -53,6 +53,8 @@ class GameState:
     
     # 本次射擊狀態（非持續性）
     saw_active: bool = False
+    
+    reverse_active: bool = False
     
     # 階段
     phase: str = "load"

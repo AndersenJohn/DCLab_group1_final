@@ -203,7 +203,7 @@ def train(
         "MlpPolicy",
         env,
         policy_kwargs=dict(
-            net_arch=[128, 128],  # Two hidden layers: 30 → 128 → 128 → 9
+            net_arch=[128, 128],  # Two hidden layers: 33 → 128 → 128 → 10
             activation_fn=torch.nn.ReLU  # Change from default Tanh to ReLU
         ),
         learning_rate=learning_rate,
@@ -220,7 +220,7 @@ def train(
     )
 
     print(f"Model created! Total parameters: ~21,000")
-    print(f"Network: Input(30) → Hidden(128) → Hidden(128) → Output(9)\n")
+    print(f"Network: Input(33) → Hidden(128) → Hidden(128) → Output(10)\n")
 
     # Initialize opponent model in all environments (important for self-play to work from start)
     print("Initializing opponent model in all environments...")

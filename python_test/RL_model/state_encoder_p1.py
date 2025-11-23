@@ -15,6 +15,7 @@ class StateEncoder:
         vec.append(gs.blank_left)
         vec.append(gs.current_index)
         vec.append(1 if gs.saw_active else 0)
+        vec.append(1 if gs.reverse_active else 0)
 
         vec += self._encode_phase(gs.phase)
 
@@ -50,6 +51,7 @@ class StateEncoder:
             items.saw,
             items.handcuff,
             items.phone,
+            items.reverse
         ]
     # ===========================
     # encode bullet list + mask

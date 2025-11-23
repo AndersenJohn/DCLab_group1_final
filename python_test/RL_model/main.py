@@ -8,13 +8,9 @@ from state_encoder_p2 import StateEncoder
 # 彈匣生成規則
 # ================================
 VALID_COMBOS = [
-    (1,1),
-    (1,2),(2,1),
     (1,3),(2,2),(3,1),
-    (2,3),(3,2),
     (2,4),(3,3),(4,2),
-    (3,4),(4,3),
-    (3,5),(4,4),(5,3),
+    (3,5),(4,4),(5,3)
 ]
 
 def generate_bullet_counts():
@@ -33,6 +29,7 @@ def show(gs: GameState):
     print(f"Live left: {gs.live_left}")
     print(f"Blank left: {gs.blank_left}")
     print(f"Saw active: {gs.saw_active}")
+    print(f"Reverse active: {gs.reverse_active}")
 
     print("\n-- Player 1 --")
     print(f"HP: {gs.p1.hp}")
@@ -81,9 +78,9 @@ def parse_command(command: str):
 # ================================
 ITEM_POOL = [
     "magnifier", "cigarette", "beer", "saw",
-    "handcuff", "phone"]
+    "handcuff", "phone", "reverse"]
 
-def give_random_items(player, amount=2):
+def give_random_items(player, amount=4):
     """每輪補 amount(=2) 個道具，但玩家最大只能有 6 個。"""
 
     # 計算現有道具總數
@@ -167,7 +164,11 @@ def handle_use(gs: GameState, item: str):
         chosen_bullet = gs.real_bullets[chosen_idx]
         player.bullet_knowledge[chosen_idx] = chosen_bullet
         print(f"一次性手機：倒數第 {total - chosen_idx} 發是 {chosen_bullet}")
-    
+        
+    elif item == "reverse":
+        gs.reverse_active = True
+        print("逆轉器：下一發子彈效果反轉啟動")
+        
     # 消耗道具
     setattr(player.items, item, getattr(player.items, item) - 1)
 
@@ -183,23 +184,58 @@ def handle_shoot(gs: GameState, target: str):
 
     victim = player if target == "self" else opponent
 
+    # saw effect
     damage = 2 if gs.saw_active else 1
     gs.saw_active = False
-
+    
+    # reverse effect
+    if gs.reverse_active:
+        bullet = "live" if bullet == "blank" else "blank"
+    
     if bullet == "blank":
-        gs.blank_left -= 1
-        if victim == player:
-            print(f"砰！空包彈 → {victim.name} 無傷")
-            gs.turn = "p1" if gs.turn == "p1" else "p2"
+        if gs.reverse_active:
+            if victim == player:
+                gs.live_left -= 1
+                print(f"砰！空包彈 → {victim.name} 無傷")
+                gs.turn = "p1" if gs.turn == "p1" else "p2"
+            else:
+                gs.live_left -= 1
+                print(f"砰！空包彈 → {victim.name} 無傷")
+                gs.turn = "p2" if gs.turn == "p1" else "p1"
         else:
-            print(f"砰！空包彈 → {victim.name} 無傷")
-            gs.turn = "p2" if gs.turn == "p1" else "p1"       
-    else:
-        print(f"砰！實彈 → {victim.name} 受傷 {damage}")
-        gs.live_left -= 1
-        victim.hp -= damage
-        gs.turn = "p2" if gs.turn == "p1" else "p1"
-        
+            if victim == player:
+                gs.blank_left -= 1
+                print(f"砰！空包彈 → {victim.name} 無傷")
+                gs.turn = "p1" if gs.turn == "p1" else "p2"
+            else:
+                gs.blank_left -= 1
+                print(f"砰！空包彈 → {victim.name} 無傷")
+                gs.turn = "p2" if gs.turn == "p1" else "p1"       
+    
+    else:  # live bullet
+        if gs.reverse_active:
+            if victim == player:
+                gs.blank_left -= 1
+                print(f"砰！實彈 → {victim.name} 受傷")
+                victim.hp -= damage
+                gs.turn = "p2" if gs.turn == "p1" else "p1"
+            else:
+                gs.blank_left -= 1
+                print(f"砰！實彈 → {victim.name} 受傷")
+                victim.hp -= damage
+                gs.turn = "p2" if gs.turn == "p1" else "p1"
+        else:
+            if victim == player:
+                gs.live_left -= 1
+                print(f"砰！實彈 → {victim.name} 受傷")
+                victim.hp -= damage
+                gs.turn = "p2" if gs.turn == "p1" else "p1"
+            else:
+                gs.live_left -= 1
+                print(f"砰！實彈 → {victim.name} 受傷")
+                victim.hp -= damage
+                gs.turn = "p2" if gs.turn == "p1" else "p1"
+                
     player.bullet_knowledge[gs.current_index - 1] = bullet
     opponent.bullet_knowledge[gs.current_index - 1] = bullet    
     
@@ -249,7 +285,7 @@ def main_loop(gs: GameState):
             
             gs.phase = "item"
             continue
-        
+        # ========== Item Phase ==========
         # 手銬跳過回合
         player = gs.get_current_player()
         if player.handcuffed:
@@ -257,14 +293,17 @@ def main_loop(gs: GameState):
             player.handcuffed = False
             gs.turn = "p2" if gs.turn == "p1" else "p1"
             continue
-        # ========== Item Phase ==========
+        
         if gs.phase == "item":
             print(f"\n=== 道具階段（{gs.turn}）===")
             print(f"\np1道具: {gs.p1.items}\np2道具: {gs.p2.items}")
             command = input(f"[{gs.turn}] >> ")
             args = parse_command(command)
 
-            if args == "ready":
+            if args is None:
+                continue
+
+            if args.action == "ready":
                 gs.phase = "shoot"
                 
             elif args.action == "show":
@@ -276,8 +315,6 @@ def main_loop(gs: GameState):
             elif args.action == "use":
                 handle_use(gs, args.item)
             
-            elif args.action == "ready":
-                gs.phase = "shoot"
         # ========== shoot Phase ==========    
         if gs.phase == "shoot":
             print(f"\n=== 射擊階段（{gs.turn}）===")
@@ -307,8 +344,7 @@ def main_loop(gs: GameState):
             winner = gs.p1 if gs.p1.hp > 0 else gs.p2
             print(f"{winner.name} 獲勝！")
             break
-
-
+        
 if __name__ == "__main__":
     gs = GameState()
     main_loop(gs)

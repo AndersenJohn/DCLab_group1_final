@@ -6,4 +6,5 @@
 5 = use saw
 6 = use handcuff
 7 = use phone
-8 = ready 進入射擊階段（從 item phase 到 shoot phase）
+8 = use reverse
+9 = ready 進入射擊階段（從 item phase 到 shoot phase）
