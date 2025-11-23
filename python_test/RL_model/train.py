@@ -44,8 +44,12 @@ class SelfPlayCallback(BaseCallback):
                 frozen_opponent = MaskablePPO.load(temp_path, device=self.model.device)
 
                 # Update opponent in all environments with frozen copy
+                # Access unwrapped BuckshotEnv (not Monitor wrapper)
                 for env in self.training_env.envs:
-                    env.opponent_model = frozen_opponent
+                    if hasattr(env, 'env'):
+                        env.env.opponent_model = frozen_opponent  # Unwrap Monitor
+                    else:
+                        env.opponent_model = frozen_opponent  # Fallback
 
             self.opponent_update_count += 1
 
@@ -239,8 +243,12 @@ def train(
         model.save(temp_path)
         initial_opponent = MaskablePPO.load(temp_path, device=device)
 
+        # Access unwrapped BuckshotEnv (not Monitor wrapper)
         for env_obj in env.envs:
-            env_obj.opponent_model = initial_opponent
+            if hasattr(env_obj, 'env'):
+                env_obj.env.opponent_model = initial_opponent  # Unwrap Monitor
+            else:
+                env_obj.opponent_model = initial_opponent  # Fallback
     print(f"✓ Opponent model set in {n_envs} environments (frozen copy)\n")
 
     # Create callbacks
