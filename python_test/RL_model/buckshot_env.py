@@ -97,6 +97,7 @@ class BuckshotEnv(gym.Env):
                 if gs.phase == "game_end":
                     done = True
                     reward += self._calc_terminal_reward()
+                    info['win'] = gs.p2.hp > 0  # True if P2 won
                     return self.encoder.encode(gs), reward, done, False, info
                 if gs.current_index >= len(gs.real_bullets):
                     self._load_new_round()
@@ -120,6 +121,7 @@ class BuckshotEnv(gym.Env):
         if gs.phase == "game_end":
             done = True
             reward += self._calc_terminal_reward()
+            info['win'] = gs.p2.hp > 0  # True if P2 won
             return self.encoder.encode(gs), reward, done, False, info
 
         # ---------- 如果子彈打完，自動 load 下一 round ----------
@@ -135,6 +137,7 @@ class BuckshotEnv(gym.Env):
             if gs.phase == "game_end":
                 done = True
                 reward += self._calc_terminal_reward()
+                info['win'] = gs.p2.hp > 0  # True if P2 won
                 return self.encoder.encode(gs), reward, done, False, info
 
             # Check if bullets ran out
@@ -171,6 +174,9 @@ class BuckshotEnv(gym.Env):
         gs.phase = "item"
         # Randomize who goes first each round for fairness
         gs.turn = random.choice(["p1", "p2"])
+
+        gs.saw_active = False
+        gs.reverse_active = False
 
         size = len(gs.real_bullets)
         gs.p1.bullet_knowledge = [None] * size
@@ -282,16 +288,17 @@ class BuckshotEnv(gym.Env):
         if item == "magnifier":
             if gs.current_index < len(gs.real_bullets):
                 if player.bullet_knowledge[gs.current_index] is not None:
-                    reward -= 1.0
- 
-                if gs.live_left == 0 or gs.blank_left == 0:
-                    k = gs.real_bullets[gs.current_index]
-                    player.bullet_knowledge[gs.current_index] = k
-                    reward -= 1.0
+                    reward -= 1.0  # Already knew, don't check further
                 else:
-                    k = gs.real_bullets[gs.current_index]
-                    player.bullet_knowledge[gs.current_index] = k
-                    reward += 1.0
+                    # Only check deducibility if not already known
+                    if gs.live_left == 0 or gs.blank_left == 0:
+                        k = gs.real_bullets[gs.current_index]
+                        player.bullet_knowledge[gs.current_index] = k
+                        reward -= 1.0  # Wasted on deducible info
+                    else:
+                        k = gs.real_bullets[gs.current_index]
+                        player.bullet_knowledge[gs.current_index] = k
+                        reward += 1.0  # Good use - new useful info
 
         elif item == "cigarette":
             if player.hp >= 4:
@@ -309,19 +316,20 @@ class BuckshotEnv(gym.Env):
                     reward -= 0.5
                 else:
                     reward += 0.15
-            removed = gs.real_bullets[gs.current_index]
-
-            # reveal 給雙方
-            player.bullet_knowledge[gs.current_index] = removed
-            opponent.bullet_knowledge[gs.current_index] = removed
-
-            # 更新 live / blank 數量
-            if removed == "live":
-                gs.live_left -= 1
+                    
+                removed = gs.real_bullets[gs.current_index]
+                player.bullet_knowledge[gs.current_index] = removed
+                opponent.bullet_knowledge[gs.current_index] = removed
+                
+                if removed == "live":
+                    gs.live_left -= 1
+                else:
+                    gs.blank_left -= 1
+                
+                gs.current_index += 1
             else:
-                gs.blank_left -= 1
-
-            gs.current_index += 1
+                # No bullets left to remove - beer does nothing but is still consumed
+                reward -= 1.0
                     
         elif item == "saw":
             gs.saw_active = True
@@ -335,31 +343,35 @@ class BuckshotEnv(gym.Env):
         elif item == "handcuff":
             opponent.handcuffed = True
             if gs.blank_left + gs.live_left <2:
-                reward -= 1.0  
-            reward += 0.5  
+                reward += 0.3
+            reward += 1.2  
 
         elif item == "phone":
-            total = len(gs.real_bullets)
-
-            if total <= 3 and total > 0:
-                last_bullet = gs.real_bullets[-1]
-                player.bullet_knowledge[-1] = last_bullet
-                reward += 0.12
-            elif total > 3:
-                candidates = [total - 3, total - 2, total - 1]
-                chosen_idx = random.choice(candidates)
-                chosen_bullet = gs.real_bullets[chosen_idx]
-                player.bullet_knowledge[chosen_idx] = chosen_bullet
-                reward += 0.12
+            remaining_count = len(gs.real_bullets) - gs.current_index
+    
+            if remaining_count <= 0:
+                reward -= 1.0  # No bullets left
+            elif remaining_count <= 3:
+                # Reveal the last remaining bullet
+                last_idx = len(gs.real_bullets) - 1
+                player.bullet_knowledge[last_idx] = gs.real_bullets[last_idx]
+                reward += 0.5
             else:
-                reward -= 0.5
+                # Reveal one of the last 3 remaining bullets
+                last_idx = len(gs.real_bullets) - 1
+                candidates = [last_idx - 2, last_idx - 1, last_idx]
+                # Make sure all candidates are >= current_index
+                candidates = [idx for idx in candidates if idx >= gs.current_index]
+                chosen_idx = random.choice(candidates)
+                player.bullet_knowledge[chosen_idx] = gs.real_bullets[chosen_idx]
+                reward += 0.5
 
         elif item == "reverse":
             gs.reverse_active = True
             if gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "live":
-                reward -= 1.0
+                reward += 0.5
             elif gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "blank":
-                reward -= 1.0
+                reward += 0.5
             else:
                 reward += 0.15
    
@@ -423,6 +435,8 @@ class BuckshotEnv(gym.Env):
                     victim.hp -= dmg
                     gs.turn = "p2" if gs.turn == "p1" else "p1"
 
+        gs.reverse_active = False
+
         # record knowledge using the effect bullet (what players observe)
         shooter.bullet_knowledge[gs.current_index - 1] = effect_bullet
         opponent = gs.p1 if shooter is gs.p2 else gs.p2
@@ -440,6 +454,8 @@ class BuckshotEnv(gym.Env):
 
         if victim.hp <= 0:
             gs.phase = "game_end"
+        else:
+            gs.phase = "item"
 
         return reward
 
@@ -474,7 +490,10 @@ class BuckshotEnv(gym.Env):
         item_actions_taken = 0
 
         while gs.phase == "item" and gs.turn == "p1" and item_actions_taken < max_item_actions:
-
+            # Check if bullets ran out (e.g., from beer usage)
+            if gs.current_index >= len(gs.real_bullets):
+                self._load_new_round()
+                return  # Exit to let the new turn start fresh
             # Get action from model or random
             if self.opponent_model:
                 obs_p1 = self.encoder_p1.encode(gs)
