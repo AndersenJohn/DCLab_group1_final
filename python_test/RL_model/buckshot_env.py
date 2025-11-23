@@ -309,7 +309,7 @@ class BuckshotEnv(gym.Env):
                     reward -= 0.5
                 else:
                     reward += 0.15
-            removed = gs.real_bullets.pop(gs.current_index)
+            removed = gs.real_bullets[gs.current_index]
 
             # reveal 給雙方
             player.bullet_knowledge[gs.current_index] = removed
