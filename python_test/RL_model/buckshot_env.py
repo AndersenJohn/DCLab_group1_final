@@ -489,6 +489,14 @@ class BuckshotEnv(gym.Env):
         max_item_actions = 6  # Prevent infinite item usage
         item_actions_taken = 0
 
+        # Debug: Check if opponent model is set (only log once per game)
+        if not hasattr(self, '_debug_logged'):
+            if self.opponent_model:
+                print(f"[DEBUG] P1 using MODEL: {type(self.opponent_model).__name__}")
+            else:
+                print(f"[DEBUG] ⚠️ P1 using RANDOM - opponent_model is None!")
+            self._debug_logged = True
+
         while gs.phase == "item" and gs.turn == "p1" and item_actions_taken < max_item_actions:
             # Check if bullets ran out (e.g., from beer usage)
             if gs.current_index >= len(gs.real_bullets):
