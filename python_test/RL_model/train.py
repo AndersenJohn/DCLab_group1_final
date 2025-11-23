@@ -6,6 +6,7 @@ Self-play implementation using MaskablePPO from Stable-Baselines3
 import os
 import numpy as np
 import torch
+import tempfile
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.monitor import Monitor
 from sb3_contrib import MaskablePPO
@@ -35,9 +36,16 @@ class SelfPlayCallback(BaseCallback):
                 print(f"Opponent update count: {self.opponent_update_count + 1}")
                 print(f"{'='*60}\n")
 
-            # Update opponent to current policy
-            for env in self.training_env.envs:
-                env.opponent_model = self.model
+            # Create a frozen copy of the current policy by saving and reloading
+            # This ensures opponent doesn't update when self.model trains
+            with tempfile.TemporaryDirectory() as tmpdir:
+                temp_path = os.path.join(tmpdir, "temp_opponent")
+                self.model.save(temp_path)
+                frozen_opponent = MaskablePPO.load(temp_path, device=self.model.device)
+
+                # Update opponent in all environments with frozen copy
+                for env in self.training_env.envs:
+                    env.opponent_model = frozen_opponent
 
             self.opponent_update_count += 1
 
@@ -97,8 +105,9 @@ class MetricsCallback(BaseCallback):
                     self.episode_rewards.append(ep_reward)
                     self.episode_lengths.append(ep_length)
 
-                    # Track wins/losses (positive terminal reward = win)
-                    is_win = ep_reward > 5  # Win gives +10 + other rewards
+                    # Track wins/losses using actual game outcome from environment
+                    # Fallback to reward check if win info not available
+                    is_win = info.get('win', ep_reward > 0)
 
                     # Update cumulative stats
                     if is_win:
@@ -309,7 +318,8 @@ def evaluate(model_path, n_episodes=100):
         total_reward += ep_reward
         episode_lengths.append(ep_length)
 
-        if ep_reward > 5:  # Win
+        # Check win from info dict, fallback to reward check
+        if info.get('win', ep_reward > 0):
             wins += 1
             result = "WIN"
         else:
