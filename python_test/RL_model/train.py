@@ -44,8 +44,12 @@ class SelfPlayCallback(BaseCallback):
                 frozen_opponent = MaskablePPO.load(temp_path, device=self.model.device)
 
                 # Update opponent in all environments with frozen copy
+                # Access unwrapped BuckshotEnv (not Monitor wrapper)
                 for env in self.training_env.envs:
-                    env.opponent_model = frozen_opponent
+                    if hasattr(env, 'env'):
+                        env.env.opponent_model = frozen_opponent  # Unwrap Monitor
+                    else:
+                        env.opponent_model = frozen_opponent  # Fallback
 
             self.opponent_update_count += 1
 
@@ -232,10 +236,20 @@ def train(
     print(f"Network: Input(33) → Hidden(128) → Hidden(128) → Output(10)\n")
 
     # Initialize opponent model in all environments (important for self-play to work from start)
+    # Create a frozen copy to ensure opponent doesn't update during first interval
     print("Initializing opponent model in all environments...")
-    for i in range(n_envs):
-        env.env_method("__setattr__", "opponent_model", model, indices=[i])
-    print(f"✓ Opponent model set in {n_envs} environments\n")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_path = os.path.join(tmpdir, "initial_opponent")
+        model.save(temp_path)
+        initial_opponent = MaskablePPO.load(temp_path, device=device)
+
+        # Access unwrapped BuckshotEnv (not Monitor wrapper)
+        for env_obj in env.envs:
+            if hasattr(env_obj, 'env'):
+                env_obj.env.opponent_model = initial_opponent  # Unwrap Monitor
+            else:
+                env_obj.opponent_model = initial_opponent  # Fallback
+    print(f"✓ Opponent model set in {n_envs} environments (frozen copy)\n")
 
     # Create callbacks
     metrics_callback = MetricsCallback(

@@ -489,6 +489,14 @@ class BuckshotEnv(gym.Env):
         max_item_actions = 6  # Prevent infinite item usage
         item_actions_taken = 0
 
+        # Debug: Check if opponent model is set (only log once per game)
+        if not hasattr(self, '_debug_logged'):
+            if self.opponent_model:
+                print(f"[DEBUG] P1 using MODEL: {type(self.opponent_model).__name__}")
+            else:
+                print(f"[DEBUG] ⚠️ P1 using RANDOM - opponent_model is None!")
+            self._debug_logged = True
+
         while gs.phase == "item" and gs.turn == "p1" and item_actions_taken < max_item_actions:
             # Check if bullets ran out (e.g., from beer usage)
             if gs.current_index >= len(gs.real_bullets):
@@ -497,7 +505,8 @@ class BuckshotEnv(gym.Env):
             # Get action from model or random
             if self.opponent_model:
                 obs_p1 = self.encoder_p1.encode(gs)
-                action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+                action_mask_p1 = self.action_masks(player="p1")
+                action, _ = self.opponent_model.predict(obs_p1, action_masks=action_mask_p1, deterministic=False)
             else:
                 # Random action when no model - bias towards ready to avoid infinite loop
                 if random.random() < 0.3:  # 30% chance to use item
@@ -542,7 +551,8 @@ class BuckshotEnv(gym.Env):
             # Get action from model or random
             if self.opponent_model:
                 obs_p1 = self.encoder_p1.encode(gs)
-                action, _ = self.opponent_model.predict(obs_p1, deterministic=False)
+                action_mask_p1 = self.action_masks(player="p1")
+                action, _ = self.opponent_model.predict(obs_p1, action_masks=action_mask_p1, deterministic=False)
             else:
                 # Random shoot action (0 or 1)
                 action = random.randint(0, 1)
@@ -559,19 +569,23 @@ class BuckshotEnv(gym.Env):
     # ---------------------------------------------------------
     # Action Masking（用於 MaskablePPO）
     # ---------------------------------------------------------
-    def action_masks(self):
+    def action_masks(self, player="p2"):
         """
         Returns binary mask for valid actions.
         1 = valid action, 0 = invalid action
         Required by MaskablePPO from sb3-contrib
+
+        Args:
+            player: "p1" or "p2" - which player's masks to return
         """
         gs = self.gs
         mask = np.zeros(10, dtype=np.int8)
 
-        if gs.phase == "item":
-            # Item phase: can use items (2-7) or ready (8)
-            p = gs.p2
+        # Select the correct player
+        p = gs.p2 if player == "p2" else gs.p1
 
+        if gs.phase == "item":
+            # Item phase: can use items (2-8) or ready (9)
             # Action 2-8: Use items (only if you have them) -> maps to ITEM_LIST (7 items)
             mask[2] = 1 if p.items.magnifier > 0 else 0
             mask[3] = 1 if p.items.cigarette > 0 else 0
