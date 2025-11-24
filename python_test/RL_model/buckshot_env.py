@@ -310,12 +310,12 @@ class BuckshotEnv(gym.Env):
 
         elif item == "beer":
             if gs.current_index < len(gs.real_bullets):
-                if player.bullet_knowledge[gs.current_index] == "live":
+                if player.bullet_knowledge[gs.current_index] is not None:
                     reward -= 0.5
-                elif player.bullet_knowledge[gs.current_index] == "blank":
+                elif gs.saw_active or gs.reverse_active:
                     reward -= 0.5
                 else:
-                    reward += 0.15
+                    reward += 0.1
                     
                 removed = gs.real_bullets[gs.current_index]
                 player.bullet_knowledge[gs.current_index] = removed
@@ -338,13 +338,13 @@ class BuckshotEnv(gym.Env):
             elif gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "blank":
                 reward -= 1.0
             else:
-                reward += 0.15
+                reward += 0.1
                 
         elif item == "handcuff":
             opponent.handcuffed = True
             if gs.blank_left + gs.live_left <2:
-                reward += 0.3
-            reward += 1.2  
+                reward -= 0.5
+            reward += 0.5  
 
         elif item == "phone":
             remaining_count = len(gs.real_bullets) - gs.current_index
@@ -369,11 +369,11 @@ class BuckshotEnv(gym.Env):
         elif item == "reverse":
             gs.reverse_active = True
             if gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "live":
-                reward += 0.5
+                reward -= 0.1
             elif gs.current_index < len(player.bullet_knowledge) and player.bullet_knowledge[gs.current_index] == "blank":
                 reward += 0.5
             else:
-                reward += 0.15
+                reward += 0.1
    
         setattr(player.items, item, getattr(player.items, item) - 1)
 
