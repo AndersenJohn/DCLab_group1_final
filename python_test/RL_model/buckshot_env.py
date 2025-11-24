@@ -188,7 +188,7 @@ class BuckshotEnv(gym.Env):
     # ---------------------------------------------------------
     # 給道具
     # ---------------------------------------------------------
-    def _give_items(self, player, amount=3):
+    def _give_items(self, player, amount=4):
         total = sum(vars(player.items).values())
         if total >= 6:
             return
