@@ -1,0 +1,55 @@
+# Quartus II / Intel FPGA
+db/
+incremental_db/
+output_files/
+simulation/
+greybox_tmp/
+hc_output/
+.qsys_edit/
+hps_isw_handoff/
+sys/
+*.sof
+*.pof
+*.jam
+*.jbc
+*.ekp
+*.jic
+*.rbf
+*.smp
+*.rpt
+*.done
+*.summary
+*.jdi
+*.pin
+*.qws
+*.bak
+*.smsg
+
+# Keep project files
+!*.qpf
+!*.qsf
+!*.v
+!*.sv
+!*.vhd
+!*.vhdl
+
+# Unity (buckshot folder)
+buckshot/*
+!buckshot/Assets/
+!buckshot/Packages/
+!buckshot/ProjectSettings/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS
+Thumbs.db
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Automatic Generated
+Commands/
+python_code/game_logs/

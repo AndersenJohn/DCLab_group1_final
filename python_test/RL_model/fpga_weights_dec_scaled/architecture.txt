@@ -1,0 +1,12 @@
+MLP Architecture for FPGA Implementation
+======================================================================
+
+Network Structure:
+  Input:    33 features
+  Hidden1:  128 neurons (ReLU)
+  Hidden2:  128 neurons (ReLU)
+  Output:   10 logits
+
+Total Parameters: 22,154
+
+S5.10 decimal scaled version (value / 2^10)

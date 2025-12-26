@@ -1,0 +1,10 @@
+0 = shoot enemy
+1 = shoot self
+2 = use magnifier
+3 = use cigarette
+4 = use beer
+5 = use saw
+6 = use handcuff
+7 = use phone
+8 = use reverse
+9 = ready 進入射擊階段（從 item phase 到 shoot phase）

@@ -1,0 +1,44 @@
+State Encoder Output Vector Documentation
+======================================
+
+Index : Description
+
+0 : live_left 
+1 : blank_left 
+2 : current_index 
+3 : saw_active
+4 : reverse_active 
+
+5 : phase_item 
+6 : phase_shoot 
+
+-- p2 (AI self) info --
+7 : p2.hp
+8 : p2.handcuffed 
+9 : p2.items.magnifier
+10 : p2.items.cigarette
+11 : p2.items.beer
+12 : p2.items.saw
+13 : p2.items.handcuff
+14 : p2.items.phone
+15 : p2.items.reverse
+
+-- p1 opponent public info --
+16 : p1.hp
+17 : p1.handcuffed
+18 : p1.items.magnifier
+19 : p1.items.cigarette
+20 : p1.items.beer
+21 : p1.items.saw
+22 : p1.items.handcuff
+23 : p1.items.phone
+24 : p1.items.reverse
+
+-- p2 bullet knowledge values (size = max_bullets) --
+25~32:
+    encoding:
+    padding = 0
+    unknown = 1
+    live    = 2
+    blank   = 3
+

@@ -1,0 +1,15 @@
+Byte,內容 (Bit [7:0])
+0,Header (0xA5)
+1,"{ Winner(2), State(4), PlayerA(1), PlayerB(1) }"
+2,"{ Saw(1), Rev(1), Handcuff(1), RptValid(1), Report(1), RptIdx(3) }"
+3,"{ HP_P0(3), 1'b0, HP_P1(3), 1'b0 }"
+4,"{ TotalBullets(4), BulletRemain(4) }"
+5,"{ BulletFilled(3), 1'b0, BulletEmpty(3), 1'b0 }"
+6,"{ BulletBitmapPtr(4), 4'b0 }"
+7,BulletBitmap(8)
+8,"{ Item_P0_0(4), Item_P0_1(4) }"
+9,"{ Item_P0_2(4), Item_P0_3(4) }"
+10,"{ Item_P0_4(4), Item_P0_5(4) }"
+11,"{ Item_P1_0(4), Item_P1_1(4) }"
+12,"{ Item_P1_2(4), Item_P1_3(4) }"
+13,"{ Item_P1_4(4), Item_P1_5(4) }"

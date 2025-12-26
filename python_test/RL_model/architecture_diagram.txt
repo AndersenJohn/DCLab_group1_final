@@ -1,0 +1,169 @@
+
+================================================================================
+                    MASKABLE PPO MODEL ARCHITECTURE
+================================================================================
+
+INPUT: Game State (30 numbers)
+  Examples: [P1_HP, P2_HP, live_count, blank_count, item_counts, ...]
+
+                                  |
+                                  | (30 numbers)
+                                  |
+                    +-------------+-------------+
+                    |                           |
+                    |                           |
+            ACTOR NETWORK                 CRITIC NETWORK
+         (Chooses actions)              (Judges states)
+                    |                           |
+                    v                           v
+            +---------------+           +---------------+
+            | Linear(30→128)|           | Linear(30→128)|
+            +---------------+           +---------------+
+                    |                           |
+                    v                           v
+                 [Tanh]                      [Tanh]
+                    |                           |
+                    v                           v
+            +---------------+           +---------------+
+            |Linear(128→128)|           |Linear(128→128)|
+            +---------------+           +---------------+
+                    |                           |
+                    v                           v
+                 [Tanh]                      [Tanh]
+                    |                           |
+                    v                           v
+              (128 features)              (128 features)
+                    |                           |
+                    v                           v
+            +---------------+           +---------------+
+            | Linear(128→9) |           | Linear(128→1) |
+            +---------------+           +---------------+
+                    |                           |
+                    v                           v
+            9 Action Logits              1 State Value
+            [0] Shoot enemy              e.g., +2.3
+            [1] Shoot self              (expect to win)
+            [2] Use magnifier
+            [3] Use cigarette           or -1.5
+            [4] Use beer               (expect to lose)
+            [5] Use saw
+            [6] Use handcuff
+            [7] Use phone
+            [8] Ready
+                    |
+                    v
+            Apply Action Mask
+            (block invalid actions)
+                    |
+                    v
+                Softmax
+                    |
+                    v
+            Action Probabilities
+            [0.05, 0.70, 0, 0, 0, 0.15, 0, 0, 0.10]
+                    |
+                    v
+            Sample or Pick Max
+                    |
+                    v
+            FINAL ACTION: 1 (Shoot Self)
+
+
+================================================================================
+                            KEY INSIGHTS
+================================================================================
+
+1. TWO SEPARATE PATHS:
+   - Actor and Critic DON'T share weights
+   - They process the same input independently
+   - Actor: "What should I do?"
+   - Critic: "How good is this situation?"
+
+2. TANH ACTIVATION:
+   - Squashes values between -1 and +1
+   - Helps with training stability
+   - Applied after each Linear layer (except output)
+
+3. ACTION MASKING:
+   - After getting logits, invalid actions → -∞
+   - Only valid actions can be chosen
+   - Example: Can't use magnifier if you don't have it
+
+4. DURING TRAINING:
+   - Both outputs are used
+   - Action logits → Calculate policy loss
+   - State value → Calculate value loss
+   - Combined loss → Update all weights
+
+5. DURING PLAYING:
+   - Only Actor path is used
+   - Get action logits → Apply mask → Pick action
+   - Critic output is ignored
+
+
+================================================================================
+                        WEIGHT DIMENSIONS
+================================================================================
+
+ACTOR PATH:
+  Layer 1: [30 × 128] + [128]     = 3,840 + 128 = 3,968 params
+  Layer 2: [128 × 128] + [128]    = 16,384 + 128 = 16,512 params
+  Action:  [128 × 9] + [9]        = 1,152 + 9 = 1,161 params
+                                  TOTAL: 21,641 params
+
+CRITIC PATH:
+  Layer 1: [30 × 128] + [128]     = 3,840 + 128 = 3,968 params
+  Layer 2: [128 × 128] + [128]    = 16,384 + 128 = 16,512 params
+  Value:   [128 × 1] + [1]        = 128 + 1 = 129 params
+                                  TOTAL: 20,609 params
+
+GRAND TOTAL: 42,250 parameters
+
+
+================================================================================
+                    FORWARD PASS EXAMPLE
+================================================================================
+
+Input State (30 numbers):
+  [4.0, 3.0, 2.0, 1.0, 0.0, 1.0, 1.0, 0.0, ...]
+                    ↓
+            Split into two:
+                    ↓
+      +-----------++-----------+
+      |           ||           |
+   ACTOR         CRITIC
+      |           ||           |
+ 30 → 128       30 → 128
+      |           ||           |
+ 128 → 128      128 → 128
+      |           ||           |
+ 128 → 9        128 → 1
+      |           ||           |
+      ↓           ↓↓           ↓
+   Logits       Value
+[2.1, -0.3,    [+1.8]
+ -5.0, -5.0,   (good position)
+ -5.0, 0.8,
+ -5.0, -5.0,
+ 1.2]
+      ↓
+  Mask Invalid
+      ↓
+[2.1, -0.3,
+ -∞, -∞,
+ -∞, 0.8,
+ -∞, -∞,
+ 1.2]
+      ↓
+   Softmax
+      ↓
+[0.68, 0.06,
+ 0.0, 0.0,
+ 0.0, 0.19,
+ 0.0, 0.0,
+ 0.07]
+      ↓
+Pick action 0
+(Shoot Enemy)
+
+================================================================================
