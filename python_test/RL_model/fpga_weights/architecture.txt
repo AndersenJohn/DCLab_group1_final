@@ -1,0 +1,22 @@
+MLP Architecture for FPGA Implementation
+======================================================================
+
+Network Structure:
+  Input:    30 features
+  Hidden1:  128 neurons (ReLU activation)
+  Hidden2:  128 neurons (ReLU activation)
+  Output:   9 actions (no activation, logits)
+
+Layer Details:
+  Layer 1: (33, 128) + bias(128) = 3,968 params
+  Layer 2: (128, 128) + bias(128) = 16,512 params
+  Layer 3: (128, 10) + bias(9) = 1,161 params
+  Total: 22,154 params
+
+Forward Pass (for FPGA):
+  1. input[33] ¡÷ fc1 ¡÷ relu ¡÷ hidden1[128]
+  2. hidden1[128] ¡÷ fc2 ¡÷ relu ¡÷ hidden2[128]
+  3. hidden2[128] ¡÷ fc3 ¡÷ logits[10]
+  4. argmax(logits) ¡÷ action
+
+Note: For action masking, set invalid action logits to -inf before argmax
