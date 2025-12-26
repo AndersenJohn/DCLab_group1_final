@@ -34,10 +34,10 @@ sys/
 !*.vhdl
 
 # Unity (buckshot folder)
-buckshot/*
-!buckshot/Assets/
-!buckshot/Packages/
-!buckshot/ProjectSettings/
+unity_game_render/*
+!unity_game_render/Assets/
+!unity_game_render/Packages/
+!unity_game_render/ProjectSettings/
 
 # Python
 __pycache__/
